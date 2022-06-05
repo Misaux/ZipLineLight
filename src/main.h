@@ -1,9 +1,10 @@
 #ifndef __MAIN_H__
 #define __MAIN_H__
 
-#define DEBUG
+//#define DEBUG
 
 #define EEPROM_SIZE 4
+#define WiFi_timeout 1000000
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -13,6 +14,7 @@
 #include <ESPmDNS.h>
 #include <EEPROM.h>
 #include <WiFiUdp.h>
+#include <WiFiMulti.h>
 
 int ID = -1;
 

@@ -1,24 +1,32 @@
 #include "main.h"
 
-/*const char* ssid = "DWR-921-327C";
-const char* password = "xcJwUsHt";*/
+const char *ssid0 = "DWR-921-327C";
+const char *password0 = "xcJwUsHt";
 
-const char *ssid = "SFR_6AE0";
-const char *password = "tjys2kki43ajgb2prv76";
+const char *ssid1 = "SFR_6AE0";
+const char *password1 = "tjys2kki43ajgb2prv76";
+
+const char *ssid2 = "Blacktop";
+const char *password2 = "black1234";
 
 bool greenLedState = false;
 const int greenLedPin = 2;
 const int redLedPin = 15;
 const int buttonPin = 16;
 bool buzzerflag = false;
+bool loopFlag = true;
 
 char packetBuffer[255];
 unsigned int localPort = 9999;
 
+int prevTime;
+int prevTimebuzz;
+
 WiFiUDP udp;
-// Create AsyncWebServer object on port 80
+
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
+WiFiMulti wifiMulti;
 
 void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info)
 {
@@ -44,12 +52,20 @@ void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
   Serial.println(info.wifi_sta_disconnected.reason);
   Serial.println("Trying to Reconnect");
 #endif
-  WiFi.begin(ssid, password);
+  while (wifiMulti.run(WiFi_timeout) != WL_CONNECTED)
+  {
+#ifdef DEBUG
+    Serial.println("WiFi not connected!!");
+#endif
+    delay(500);
+    WiFi.disconnect();
+    ESP.restart();
+  }
 }
 
 void notifyClients()
 {
-  ws.textAll(String(greenLedState));
+  ws.textAll(String(loopFlag));
 }
 
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
@@ -60,7 +76,24 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
     data[len] = 0;
     if (strcmp((char *)data, "toggle") == 0)
     {
-      greenLedState = !greenLedState;
+      loopFlag = !loopFlag;
+      if (ID == 1)
+      {
+        analogWrite(greenLedPin, 0);
+      }
+      else
+      {
+        if (loopFlag)
+        {
+          digitalWrite(greenLedPin, false);
+          digitalWrite(redLedPin, false);
+        }
+        else
+        {
+          digitalWrite(greenLedPin, true);
+          digitalWrite(redLedPin, false);
+        }
+      }
       notifyClients();
     }
   }
@@ -103,7 +136,7 @@ String processor(const String &var)
 #endif
   if (var == "STATE")
   {
-    if (greenLedState)
+    if (loopFlag)
     {
       return "ON";
     }
@@ -117,33 +150,32 @@ String processor(const String &var)
 
 void setup()
 {
-// Serial port for debugging purposes
-#ifdef DEBUG
-  Serial.begin(115200);
-#endif
   EEPROM.begin(EEPROM_SIZE);
   ID = EEPROM.read(0);
 #ifdef DEBUG
+  Serial.begin(115200);
   Serial.println(ID);
 #endif
 
   pinMode(greenLedPin, OUTPUT);
+  pinMode(redLedPin, OUTPUT);
   pinMode(buttonPin, INPUT_PULLUP);
   digitalWrite(greenLedPin, greenLedState);
-  digitalWrite(redLedPin, !greenLedPin);
-
+  digitalWrite(redLedPin, greenLedState);
+  // Adding all WiFi credential to WiFi multi class
+  wifiMulti.addAP(ssid0, password0);
+  wifiMulti.addAP(ssid1, password1);
+  wifiMulti.addAP(ssid2, password2);
   // Connect to Wi-Fi
-  WiFi.begin(ssid, password);
   WiFi.onEvent(WiFiStationConnected, ARDUINO_EVENT_WIFI_STA_CONNECTED);
   WiFi.onEvent(WiFiGotIP, ARDUINO_EVENT_WIFI_STA_GOT_IP);
   WiFi.onEvent(WiFiStationDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
-  while (WiFi.status() != WL_CONNECTED)
+  while (wifiMulti.run(WiFi_timeout) != WL_CONNECTED)
   {
-    delay(1000);
-#ifdef DEBUG
-    Serial.println("Connecting to WiFi..");
-#endif
+    delay(500);
+    WiFi.disconnect();
+    ESP.restart();
   }
 
   initWebSocket();
@@ -179,6 +211,7 @@ void receiveUDP()
       {
         greenLedState = false;
         digitalWrite(greenLedPin, greenLedState);
+        digitalWrite(redLedPin, greenLedState);
       }
 #ifdef DEBUG
       Serial.println(greenLedState);
@@ -187,62 +220,65 @@ void receiveUDP()
   }
 }
 
-int prevTime;
-int prevTimebuzz;
-
 void loop()
 {
   ws.cleanupClients();
-  digitalWrite(greenLedPin, greenLedState);
-
-  int packetSize = udp.parsePacket();
-
-  if (packetSize > 0)
+  if (loopFlag)
   {
-#ifdef DEBUG
-    Serial.print(" Received packet from : ");
-    Serial.println(udp.remoteIP());
-    Serial.print(" Size : ");
-    Serial.println(packetSize);
-#endif
-    receiveUDP();
-  }
+    int packetSize = udp.parsePacket();
 
-  if (ID == 1)
-  {
-    if (buzzerflag && (millis() - prevTimebuzz > 500))
+    if (packetSize > 0)
     {
-      greenLedState = !greenLedState;
-      digitalWrite(greenLedPin, greenLedState);
-      prevTimebuzz = millis();
+#ifdef DEBUG
+      Serial.print(" Received packet from : ");
+      Serial.println(udp.remoteIP());
+      Serial.print(" Size : ");
+      Serial.println(packetSize);
+#endif
+      receiveUDP();
     }
-    if (digitalRead(buttonPin) == LOW && (millis() - prevTime > 1000))
+
+    if (ID == 1)
     {
-      udp.beginPacket("192.168.1.43", localPort);
-      udp.printf("press");
-      udp.endPacket();
-      greenLedState = false;
-      buzzerflag = false;
-      digitalWrite(greenLedPin, greenLedState);
+      if (buzzerflag && (millis() - prevTimebuzz > 500))
+      {
+        greenLedState = !greenLedState;
+        if (greenLedState)
+          analogWrite(greenLedPin, 80);
+        else
+          analogWrite(greenLedPin, 0);
+        prevTimebuzz = millis();
+      }
+      if (digitalRead(buttonPin) == LOW && (millis() - prevTime > 1000))
+      {
+        udp.beginPacket("192.168.1.43", localPort);
+        udp.printf("press");
+        udp.endPacket();
+        greenLedState = false;
+        buzzerflag = false;
+        analogWrite(greenLedPin, 0);
+
 #ifdef DEBUG
-      Serial.println("button press");
+        Serial.println("button press");
 #endif
-      prevTime = millis();
+        prevTime = millis();
+      }
     }
-  }
-  else
-  {
-    if (digitalRead(buttonPin) == LOW && (millis() - prevTime > 1000))
+    else
     {
-      udp.beginPacket("192.168.1.27", localPort);
-      udp.printf("press");
-      udp.endPacket();
-      greenLedState = true;
-      digitalWrite(greenLedPin, greenLedState);
+      if (digitalRead(buttonPin) == LOW && (millis() - prevTime > 1000))
+      {
+        udp.beginPacket("192.168.1.27", localPort);
+        udp.printf("press");
+        udp.endPacket();
+        greenLedState = true;
+        digitalWrite(greenLedPin, greenLedState);
+        digitalWrite(redLedPin, greenLedState);
 #ifdef DEBUG
-      Serial.println("button press");
+        Serial.println("button press");
 #endif
-      prevTime = millis();
+        prevTime = millis();
+      }
     }
   }
 }
