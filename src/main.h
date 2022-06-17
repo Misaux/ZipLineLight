@@ -95,9 +95,13 @@ const char index_html[] PROGMEM = R"rawliteral(
   </div>
   <div class="content">
     <div class="card">
-      <h2>Output - GPIO 2</h2>
+      <h2>light sleep</h2>
       <p class="state">state: <span id="state">%STATE%</span></p>
       <p><button id="button" class="button">Toggle</button></p>
+    </div>
+    <div class="card">
+      <h2>deep sleep</h2>
+      <p><button id="button2" class="button">Deep Sleep</button></p>
     </div>
   </div>
 <script>
@@ -134,9 +138,13 @@ const char index_html[] PROGMEM = R"rawliteral(
   }
   function initButton() {
     document.getElementById('button').addEventListener('click', toggle);
+    document.getElementById('button2').addEventListener('click', deepsleep);
   }
   function toggle(){
     websocket.send('toggle');
+  }
+  function deepsleep(){
+    websocket.send('DEEPSLEEP');
   }
 </script>
 </body>

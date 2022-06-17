@@ -20,6 +20,7 @@ char packetBuffer[255];
 unsigned int localPort = 9999;
 
 int prevTime;
+int prevTimeStandby;
 int prevTimebuzz;
 
 WiFiUDP udp;
@@ -96,6 +97,20 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
       }
       notifyClients();
     }
+    if (strcmp((char *)data, "DEEPSLEEP") == 0)
+    {
+      if (ID == 1)
+      {
+        analogWrite(greenLedPin, 0);
+        esp_deep_sleep(4294967295);
+      }
+      else
+      {
+        digitalWrite(greenLedPin, true);
+        digitalWrite(redLedPin, false);
+        esp_deep_sleep(4294967295);
+      }
+    }
   }
 }
 
@@ -161,7 +176,7 @@ void setup()
   pinMode(redLedPin, OUTPUT);
   pinMode(buttonPin, INPUT_PULLUP);
   digitalWrite(greenLedPin, greenLedState);
-  digitalWrite(redLedPin, greenLedState);
+  digitalWrite(redLedPin, !greenLedState);
   // Adding all WiFi credential to WiFi multi class
   wifiMulti.addAP(ssid0, password0);
   wifiMulti.addAP(ssid1, password1);
@@ -178,6 +193,8 @@ void setup()
     ESP.restart();
   }
 
+  digitalWrite(greenLedPin, greenLedState);
+  digitalWrite(redLedPin, greenLedState);
   initWebSocket();
 
   // Route for root / web page
@@ -206,6 +223,7 @@ void receiveUDP()
       if (ID == 1)
       {
         buzzerflag = true;
+        prevTimeStandby = millis();
       }
       else
       {
@@ -240,18 +258,18 @@ void loop()
 
     if (ID == 1)
     {
-      if (buzzerflag && (millis() - prevTimebuzz > 500))
+      if (buzzerflag && (millis() - prevTimebuzz > 500) && millis() - prevTimeStandby > 25000)
       {
         greenLedState = !greenLedState;
         if (greenLedState)
-          analogWrite(greenLedPin, 80);
+          analogWrite(greenLedPin, 200);
         else
           analogWrite(greenLedPin, 0);
         prevTimebuzz = millis();
       }
-      if (digitalRead(buttonPin) == LOW && (millis() - prevTime > 1000))
+      if (digitalRead(buttonPin) == LOW && (millis() - prevTime > 1000) && millis() - prevTimeStandby > 18000)
       {
-        udp.beginPacket("192.168.1.43", localPort);
+        udp.beginPacket("192.168.0.43", localPort);
         udp.printf("press");
         udp.endPacket();
         greenLedState = false;
@@ -268,7 +286,7 @@ void loop()
     {
       if (digitalRead(buttonPin) == LOW && (millis() - prevTime > 1000))
       {
-        udp.beginPacket("192.168.1.27", localPort);
+        udp.beginPacket("192.168.0.27", localPort);
         udp.printf("press");
         udp.endPacket();
         greenLedState = true;
